@@ -2,41 +2,70 @@
 ###############################
 # Written by Tsali            #
 #       github.com/tsali      #
-#          2018/06/19         #
+# Created  2018/06/19         #
+# Updated  2025/09/10         #
 ###############################
 
-echo ""
-echo "This is a simple tool to list advertised routes for any ASN"
-echo ""
-read -p "Enter the ASN: " line
-echo ""
-echo "Advertised routes for AS"$line" per RADB.NET"
-whois -h whois.radb.net -- '-i origin AS'"$line"'' | grep "/" | awk '{print$2}' | egrep ^[1-9]
-echo ""
-read -p "Press any key to continue to ARIN.NET.."
-echo ""
-echo "Advertised routes for AS"$line" per ARIN.NET"
-whois -h whois.arin.net -- '-i origin AS'"$line"'' | grep "/" | awk '{print$2}' | egrep ^[1-9]
-echo ""
-read -p "Press any key to continue to APNIC.NET.."
-echo ""
-echo "Advertised routes for AS"$line" per APNIC.NET"
-whois -h whois.apnic.net -- '-i origin AS'"$line"'' | grep "/" | awk '{print$2}' | egrep ^[1-9]
-echo ""
-read -p "Press any key to continue to RIPE.NET.."
-echo ""
-echo "Advertised routes for AS"$line" per RIPE.NET"
-whois -h whois.ripe.net -- '-i origin AS'"$line"'' | grep "/" | awk '{print$2}' | egrep ^[1-9]
-echo ""
-read -p "Press any key to continue to LACNIC.NET"
-echo ""
-echo "Advertised routes for AS"$line" per LACNIC.NET"
-whois -h whois.lacnic.net -- '-i origin AS'"$line"'' | grep "/" | awk '{print$2}' | egrep ^[1-9]
-echo ""
-read -p "Press any key to continue to AFRINIC.NET"
-echo ""
-echo "Advertised routes for AS"$line" per AFRINIC.NET"
-whois -h whois.afrinic.net -- '-i origin AS'"$line"'' | grep "/" | awk '{print$2}' | egrep ^[1-9]
-echo ""
-read -p "Press any key to exit.."
-echo ""
+# Usage: ./asn [ASN] [-q]
+
+# Check if quick mode is enabled
+QUICK=0
+for arg in "$@"; do
+    if [[ "$arg" == "-q" ]]; then
+        QUICK=1
+    fi
+done
+
+# Get ASN from command-line arg or prompt
+if [[ -n "$1" && "$1" != "-q" ]]; then
+    ASN="$1"
+else
+    read -p "Enter the ASN: " ASN
+fi
+
+echo
+echo "Looking up advertised routes for AS${ASN}"
+echo
+
+# Detect whois
+if command -v whois >/dev/null 2>&1; then
+    # Use whois method
+    servers=(
+        "radb.net"
+        "arin.net"
+        "apnic.net"
+        "ripe.net"
+        "lacnic.net"
+        "afrinic.net"
+    )
+
+    for srv in "${servers[@]}"; do
+        echo "=== Advertised routes for AS${ASN} per ${srv^^} ==="
+        whois -h "whois.${srv}" "-- -i origin AS${ASN}" \
+            | awk '/\// {print $2}' \
+            | grep -E '^[1-9]'
+        echo
+
+        if [[ $QUICK -eq 0 ]]; then
+            read -n 1 -s -r -p "Press any key to continue..."
+            echo -e "\n"
+        fi
+    done
+
+else
+    # Fallback to RDAP
+    if ! command -v curl >/dev/null 2>&1; then
+        echo "Error: Neither 'whois' nor 'curl' are available. Cannot continue."
+        exit 1
+    fi
+
+    echo "whois not found, falling back to RDAP queries via curl..."
+    echo
+
+    # RDAP lookup (single global endpoint via rdap.org)
+    echo "=== Advertised routes for AS${ASN} via RDAP ==="
+    curl -s "https://rdap.org/autnum/${ASN}" | jq .
+    echo
+fi
+
+echo "All lookups completed."
