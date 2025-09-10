@@ -6,66 +6,45 @@
 # Updated  2025/09/10         #
 ###############################
 
-# Usage: ./asn [ASN] [-q]
+# Default: interactive mode
+QUIET=0
 
-# Check if quick mode is enabled
-QUICK=0
-for arg in "$@"; do
-    if [[ "$arg" == "-q" ]]; then
-        QUICK=1
-    fi
-done
+# Check for -q flag
+if [[ "$1" == "-q" ]]; then
+    QUIET=1
+    shift
+fi
 
-# Get ASN from command-line arg or prompt
-if [[ -n "$1" && "$1" != "-q" ]]; then
+# Get ASN from CLI argument or prompt
+if [ -n "$1" ]; then
     ASN="$1"
 else
     read -p "Enter the ASN: " ASN
 fi
 
-echo
-echo "Looking up advertised routes for AS${ASN}"
-echo
+echo ""
+echo "=== ASN Route Lookup Tool ==="
+echo ""
 
-# Detect whois
-if command -v whois >/dev/null 2>&1; then
-    # Use whois method
-    servers=(
-        "radb.net"
-        "arin.net"
-        "apnic.net"
-        "ripe.net"
-        "lacnic.net"
-        "afrinic.net"
-    )
+# Define registries and whois servers
+registries=("RADB" "ARIN" "APNIC" "RIPE" "LACNIC" "AFRINIC")
+hosts=("whois.radb.net" "whois.arin.net" "whois.apnic.net" "whois.ripe.net" "whois.lacnic.net" "whois.afrinic.net")
 
-    for srv in "${servers[@]}"; do
-        echo "=== Advertised routes for AS${ASN} per ${srv^^} ==="
-        whois -h "whois.${srv}" "-- -i origin AS${ASN}" \
-            | awk '/\// {print $2}' \
-            | grep -E '^[1-9]'
-        echo
-
-        if [[ $QUICK -eq 0 ]]; then
-            read -n 1 -s -r -p "Press any key to continue..."
-            echo -e "\n"
+for i in "${!registries[@]}"; do
+    # Fetch routes
+    routes=$(whois -h "${hosts[$i]}" -i origin "AS$ASN" 2>/dev/null | awk '/\/[0-9]+/ {print $2}' | sort -u)
+    
+    # Skip empty results
+    if [ -n "$routes" ]; then
+        echo "Advertised routes for AS$ASN per ${registries[$i]}:"
+        echo "$routes"
+        echo ""
+        # Only prompt if not quiet
+        if [ "$QUIET" -eq 0 ]; then
+            read -p "Press any key to continue..."
+            echo ""
         fi
-    done
-
-else
-    # Fallback to RDAP
-    if ! command -v curl >/dev/null 2>&1; then
-        echo "Error: Neither 'whois' nor 'curl' are available. Cannot continue."
-        exit 1
     fi
+done
 
-    echo "whois not found, falling back to RDAP queries via curl..."
-    echo
-
-    # RDAP lookup (single global endpoint via rdap.org)
-    echo "=== Advertised routes for AS${ASN} via RDAP ==="
-    curl -s "https://rdap.org/autnum/${ASN}" | jq .
-    echo
-fi
-
-echo "All lookups completed."
+echo "Done."
