@@ -1,0 +1,30 @@
+#!/bin/bash
+#
+#########################################################
+# By: Rai                                               #
+# Purpose: Simple script to pull hostnames and IP's     #
+# nightly from <TOOL> and update the hostfile to make   #
+# reaching and looking up devices just a tad bit easier #
+#                                                       #
+# Version - 0.2 - 2022/06/27                            #
+#       Changed to nightly in cronjob                   #
+#       Created new job/script to tar/mv old host files #
+#       to a backup folder monthly - /bin/hostbackups   #
+# Version - 0.1 - 2022/04/06                            #
+#       Initial creation                                #
+#########################################################
+
+# This version was desgined explicitely for use with a LIBRENMS API, however it should be relatively agnostic enough to convert to whatever network device monitoring tool you have and a linux server/jump box
+
+# Back-up the old hostfile for safety
+cp /etc/hosts /etc/hosts.backup.$(date +%m-%d-%Y)
+
+# Copy an original hostfile so we start with a clean file
+cp /etc/hosts.original /etc/hosts
+
+# Echo a blank line and a header so we know where we're starting if we need to do a manual look/edit
+echo "" >> /etc/hosts
+echo "# <TOOL> Hosts current as of $(date)" >> /etc/hosts
+
+# Curl to the API of <TOOL>, grep the needed info, AWK it into a proper format and echo it into the host file
+curl -H 'X-Auth-Token: (TOKEN)' http://TOOLSITE/API/endpoint 2>&1 | grep -v -i "dependency\|libre" | grep "hostname\|sysName" | awk '{printf "%s%s",$0,NR%2?"\t":RS}' | awk '{print $2 $4}' | sed 's/["]//g' | sed 's/[,]/\t/g' >> /etc/hosts
